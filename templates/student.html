@@ -1,6 +1,178 @@
-{% extends "base.html" %}{% block title %}Mi panel · EduPredict{% endblock %}{% block content %}<div class="page-head"><div><p class="eyebrow">PANEL DEL ALUMNO</p><h1>Hola, {{ me.display_name }}</h1><p class="muted">Tus datos son privados y solo tú puedes consultar tus calificaciones.</p></div></div>
-<section class="cards">{% set ns = namespace(total=0,count=0,at_risk=0) %}{% for e,r in rows %}{% if r.current is not none %}{% set ns.total = ns.total + r.current %}{% set ns.count = ns.count + 1 %}{% if r.current < 7 %}{% set ns.at_risk = ns.at_risk + 1 %}{% endif %}{% endif %}{% endfor %}
-<div class="metric"><span>Promedio de materias con notas</span><strong>{{ '%.2f'|format(ns.total/ns.count) if ns.count else '—' }}</strong></div><div class="metric"><span>Materias inscritas</span><strong>{{ rows|length }}</strong></div><div class="metric"><span>En seguimiento prioritario</span><strong>{{ ns.at_risk }}</strong></div></section>
-<section class="panel"><div class="section-head"><h2>Mis materias</h2></div>{% if rows %}<div class="subject-grid">{% for e,r in rows %}<article class="subject"><div class="tag">Semestre {{ e.offering.semester }}</div><h3>{{ e.offering.subject_name }}</h3><p class="muted">Docente: {{ e.offering.teacher.display_name }} · Grupo: {{ e.offering.group_name }}</p><div class="grade">{{ '%.2f'|format(r.current) if r.current is not none else '—' }}<small>{% if r.final is not none %}Final registrada{% else %}Promedio de criterios capturados{% endif %}</small></div><p class="muted">Porcentaje capturado: {{ '%.0f'|format(r.completed_weight) }}% de 100%</p><div class="progress"><i style="width:{{ r.completed_weight }}%"></i></div><a class="text-link" href="{{ url_for('grades', enrollment_id=e.id) }}">Registrar / editar calificaciones →</a></article>{% endfor %}</div>{% else %}<p class="muted">Aún no tienes materias. Agrégalas desde el catálogo.</p>{% endif %}</section>
-<section class="panel"><h2>Catálogo de materias</h2><p class="muted">Elige la materia y el grupo que realmente cursas.</p><div class="table-wrap"><table><tr><th>Materia</th><th>Semestre</th><th>Docente</th><th>Grupo</th><th></th></tr>{% for o in available %}<tr><td>{{ o.subject_name }}</td><td>{{ o.semester }}</td><td>{{ o.teacher.display_name }}</td><td>{{ o.group_name }}</td><td><form method="post" action="{{ url_for('enroll', offering_id=o.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="small-btn">Agregar</button></form></td></tr>{% else %}<tr><td colspan="5">Todavía no hay materias publicadas por docentes.</td></tr>{% endfor %}</table></div></section>
-<section class="panel"><h2>Mi plan de estudio</h2><form class="inline-form" method="post" action="{{ url_for('add_note') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><select name="offering_id" required><option value="">Materia inscrita</option>{% for e,r in rows %}<option value="{{ e.offering_id }}">{{ e.offering.subject_name }}</option>{% endfor %}</select><input name="title" placeholder="Actividad o evaluación" required maxlength="100"><input type="date" name="due_date"><button class="small-btn">Agregar</button></form>{% for n in notes %}<div class="note-row"><form method="post" action="{{ url_for('complete_note', note_id=n.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="check-btn">{{ '✓' if n.done else '○' }}</button></form><span class="{{ 'done' if n.done else '' }}">{{ n.title }} · {{ n.offering.subject_name }} {% if n.due_date %}· {{ n.due_date.strftime('%d/%m/%Y') }}{% endif %}</span></div>{% else %}<p class="muted">Agrega actividades para organizarte.</p>{% endfor %}</section>{% endblock %}
+{% extends "base.html" %}
+{% block title %}Mi panel · EduPredict{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <p class="eyebrow">PANEL DEL ALUMNO</p>
+    <h1>Hola, {{ me.display_name }}</h1>
+    <p class="muted">Tus datos son privados y solo tú puedes consultar tus calificaciones.</p>
+  </div>
+</div>
+
+{% set ns = namespace(total=0, count=0, at_risk=0, approved=0, captured=0, total_weight=0) %}
+{% for e, r in rows %}
+  {% if r.current is not none %}
+    {% set ns.total = ns.total + r.current %}
+    {% set ns.count = ns.count + 1 %}
+    {% if r.current < 7 %}{% set ns.at_risk = ns.at_risk + 1 %}{% else %}{% set ns.approved = ns.approved + 1 %}{% endif %}
+  {% endif %}
+  {% set ns.captured = ns.captured + r.completed_weight %}
+  {% set ns.total_weight = ns.total_weight + r.total_weight %}
+{% endfor %}
+{% set average = (ns.total / ns.count) if ns.count else none %}
+{% set overall_progress = (ns.captured / ns.total_weight * 100) if ns.total_weight else 0 %}
+
+<section class="cards">
+  <div class="metric"><span>Promedio de materias con notas</span><strong>{{ '%.2f'|format(average) if average is not none else '—' }}</strong></div>
+  <div class="metric"><span>Materias inscritas</span><strong>{{ rows|length }}</strong></div>
+  <div class="metric"><span>En seguimiento prioritario</span><strong>{{ ns.at_risk }}</strong></div>
+</section>
+
+<section class="panel performance-panel">
+  <div class="section-head">
+    <div>
+      <p class="eyebrow">RESUMEN VISUAL</p>
+      <h2>Mi rendimiento académico</h2>
+      <p class="muted">Consulta tus resultados y el avance de las evaluaciones que has capturado.</p>
+    </div>
+  </div>
+
+  <div class="performance-stats">
+    <div class="performance-stat">
+      <span>Materias con promedio de 7 o más</span>
+      <strong>{{ ns.approved }}</strong>
+    </div>
+    <div class="performance-stat">
+      <span>Materias por revisar</span>
+      <strong>{{ ns.at_risk }}</strong>
+    </div>
+    <div class="performance-stat">
+      <span>Avance de captura general</span>
+      <strong>{{ '%.0f'|format(overall_progress) }}%</strong>
+    </div>
+  </div>
+
+  <div class="charts-grid">
+    <div class="chart-card">
+      <h3>Promedio por materia</h3>
+      <p class="muted chart-help">Escala de 0 a 10. Solo se muestran materias con calificaciones.</p>
+      {% set has_subject_grades = namespace(value=false) %}
+      {% for e, r in rows %}
+        {% if r.current is not none %}
+          {% set has_subject_grades.value = true %}
+          <div class="bar-item">
+            <div class="bar-label"><span>{{ e.offering.subject_name }}</span><strong>{{ '%.2f'|format(r.current) }}</strong></div>
+            <div class="bar-track"><span class="bar-fill {{ 'bar-good' if r.current >= 7 else 'bar-warning' }}" style="width:{{ [r.current * 10, 100]|min }}%"></span></div>
+            <small>Semestre {{ e.offering.semester }} · Grupo {{ e.offering.group_name }}</small>
+          </div>
+        {% endif %}
+      {% endfor %}
+      {% if not has_subject_grades.value %}
+        <p class="empty-chart">Cuando registres calificaciones, aquí aparecerá tu promedio por materia.</p>
+      {% endif %}
+    </div>
+
+    <div class="chart-card">
+      <h3>Avance de evaluaciones</h3>
+      <p class="muted chart-help">Porcentaje de los criterios que ya tienen una calificación registrada.</p>
+      {% if rows %}
+        {% for e, r in rows %}
+          <div class="bar-item">
+            <div class="bar-label"><span>{{ e.offering.subject_name }}</span><strong>{{ '%.0f'|format(r.completed_weight) }}%</strong></div>
+            <div class="bar-track"><span class="bar-fill bar-progress" style="width:{{ [r.completed_weight, 100]|min }}%"></span></div>
+            <small>{{ '%.0f'|format(r.completed_weight) }} de {{ '%.0f'|format(r.total_weight) }} puntos porcentuales capturados</small>
+          </div>
+        {% endfor %}
+      {% else %}
+        <p class="empty-chart">Inscríbete en una materia para comenzar a llevar tu avance.</p>
+      {% endif %}
+      <div class="overall-progress">
+        <div class="bar-label"><span>Avance total</span><strong>{{ '%.0f'|format(overall_progress) }}%</strong></div>
+        <div class="bar-track"><span class="bar-fill bar-progress" style="width:{{ [overall_progress, 100]|min }}%"></span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="chart-card criteria-chart">
+    <h3>Calificaciones por criterio</h3>
+    <p class="muted chart-help">Detalle de las evaluaciones registradas en cada materia.</p>
+    {% set has_criteria = namespace(value=false) %}
+    {% for e, r in rows %}
+      {% for c in e.offering.criteria %}
+        {% if c.id in r.entered %}
+          {% set has_criteria.value = true %}
+          <div class="criterion-bar">
+            <div class="bar-label">
+              <span>{{ e.offering.subject_name }} · {{ c.name }} <small>({{ '%.0f'|format(c.weight) }}%)</small></span>
+              <strong>{{ '%.2f'|format(r.entered[c.id]) }}</strong>
+            </div>
+            <div class="bar-track"><span class="bar-fill {{ 'bar-good' if r.entered[c.id] >= 7 else 'bar-warning' }}" style="width:{{ [r.entered[c.id] * 10, 100]|min }}%"></span></div>
+          </div>
+        {% endif %}
+      {% endfor %}
+    {% endfor %}
+    {% if not has_criteria.value %}
+      <p class="empty-chart">Aún no hay criterios evaluados para mostrar.</p>
+    {% endif %}
+  </div>
+  <p class="chart-note">El nivel de 7 se utiliza como referencia orientativa dentro de EduPredict; no sustituye los criterios oficiales de evaluación de tu plantel.</p>
+</section>
+
+<section class="panel">
+  <div class="section-head"><h2>Mis materias</h2></div>
+  {% if rows %}
+    <div class="subject-grid">
+      {% for e, r in rows %}
+        <article class="subject">
+          <div class="tag">Semestre {{ e.offering.semester }}</div>
+          <h3>{{ e.offering.subject_name }}</h3>
+          <p class="muted">Docente: {{ e.offering.teacher.display_name }} · Grupo: {{ e.offering.group_name }}</p>
+          <div class="grade">{{ '%.2f'|format(r.current) if r.current is not none else '—' }}<small>{% if r.final is not none %}Final registrada{% elif r.current is not none %}Promedio parcial{% else %}Sin calificaciones{% endif %}</small></div>
+          <p class="muted">Porcentaje capturado: {{ '%.0f'|format(r.completed_weight) }}% de 100%</p>
+          <div class="progress"><i style="width:{{ r.completed_weight }}%"></i></div>
+          {% if r.final is none and r.current is not none %}
+            <p class="muted">Proyección orientativa si lo pendiente fuera 7: <strong>{{ '%.2f'|format(r.projected) }}</strong></p>
+          {% endif %}
+          <a class="text-link" href="{{ url_for('grades', enrollment_id=e.id) }}">Registrar / editar calificaciones →</a>
+        </article>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p class="muted">Aún no tienes materias. Agrégalas desde el catálogo.</p>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <h2>Catálogo de materias</h2>
+  <p class="muted">Elige la materia y el grupo que realmente cursas.</p>
+  <div class="table-wrap">
+    <table>
+      <tr><th>Materia</th><th>Semestre</th><th>Docente</th><th>Grupo</th><th></th></tr>
+      {% for o in available %}
+        <tr><td>{{ o.subject_name }}</td><td>{{ o.semester }}</td><td>{{ o.teacher.display_name }}</td><td>{{ o.group_name }}</td><td><form method="post" action="{{ url_for('enroll', offering_id=o.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="small-btn">Agregar</button></form></td></tr>
+      {% else %}
+        <tr><td colspan="5">Todavía no hay materias publicadas por docentes.</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+</section>
+
+<section class="panel">
+  <h2>Mi plan de estudio</h2>
+  <form class="inline-form" method="post" action="{{ url_for('add_note') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <select name="offering_id" required><option value="">Materia inscrita</option>{% for e, r in rows %}<option value="{{ e.offering_id }}">{{ e.offering.subject_name }}</option>{% endfor %}</select>
+    <input name="title" placeholder="Actividad o evaluación" required maxlength="100">
+    <input type="date" name="due_date">
+    <button class="small-btn">Agregar</button>
+  </form>
+  {% for n in notes %}
+    <div class="note-row">
+      <form method="post" action="{{ url_for('complete_note', note_id=n.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="check-btn">{{ '✓' if n.done else '○' }}</button></form>
+      <span class="{{ 'done' if n.done else '' }}">{{ n.title }} · {{ n.offering.subject_name }} {% if n.due_date %}· {{ n.due_date.strftime('%d/%m/%Y') }}{% endif %}</span>
+    </div>
+  {% else %}
+    <p class="muted">Agrega actividades para organizarte.</p>
+  {% endfor %}
+</section>
+{% endblock %}
