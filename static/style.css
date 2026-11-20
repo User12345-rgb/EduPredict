@@ -37,3 +37,20 @@
   .charts-grid{grid-template-columns:1fr}
   .chart-card{padding:16px}
 }
+
+/* Rubricas y soporte: extensiones compatibles con el diseño original */
+.report-nav{background:var(--mint);padding:7px 11px;border-radius:9px}
+.rubric-heading{color:var(--green);font-size:15px;margin:17px 0 5px;padding-bottom:5px;border-bottom:1px solid var(--line)}
+.rubric-editor{border:1px solid var(--line);border-radius:13px;padding:16px;margin:14px 0;background:#fff}
+.rubric-top{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end}
+.rubric-top label{grid-column:1/-1;margin-bottom:0}
+.rubric-top input{margin-bottom:5px}
+.rubric-criteria{margin:8px 0}
+.rubric-total{background:var(--mint);color:var(--green);padding:12px 14px;border-radius:10px;margin:16px 0;font-weight:700}
+.rubric-grade-group{margin:18px 0}
+.report-card{border:1px solid var(--line);border-radius:13px;padding:17px;margin:13px 0;background:#fff}
+.report-card p{white-space:pre-wrap;overflow-wrap:anywhere}
+.report-meta{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.report-card form{margin-top:12px}
+textarea{width:100%;min-height:150px;padding:12px 13px;border:1px solid #dce4dc;border-radius:9px;background:#fff;font:inherit;color:var(--ink);resize:vertical}
+@media(max-width:700px){.top{height:auto;min-height:72px;align-items:flex-start;padding-top:15px;padding-bottom:15px;gap:10px}nav{flex-wrap:wrap;justify-content:flex-end}.rubric-top{grid-template-columns:1fr}.rubric-top label{grid-column:auto}}

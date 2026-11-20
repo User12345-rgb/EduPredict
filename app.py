@@ -100,6 +100,39 @@ class StudyNote(db.Model):
     offering = db.relationship("Offering")
 
 
+class ProblemReport(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    username = db.Column(db.String(100), nullable=True)
+    category = db.Column(db.String(40), nullable=False)
+    message = db.Column(db.Text, nullable=False)
+    status = db.Column(db.String(20), nullable=False, default="Pendiente")
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    user = db.relationship("User")
+
+
+# Crea únicamente tablas que no existan; no elimina ni reinicia datos.
+with app.app_context():
+    db.create_all()
+
+
+def split_criterion(criterion):
+    if "|||" in criterion.name:
+        rubric, name = criterion.name.split("|||", 1)
+        return rubric, name
+    return "Rúbrica general", criterion.name
+
+
+def group_criteria(criteria):
+    groups = []
+    for criterion in criteria:
+        rubric, name = split_criterion(criterion)
+        if not groups or groups[-1]["name"] != rubric:
+            groups.append({"name": rubric, "criteria": []})
+        groups[-1]["criteria"].append(criterion)
+    return groups
+
+
 def current_user():
     uid = session.get("user_id")
     return db.session.get(User, uid) if uid else None
@@ -212,7 +245,8 @@ def dashboard():
     user = current_user()
     if user.role == "admin":
         pending = User.query.filter_by(role="docente", approved=False).order_by(User.created_at).all()
-        return render_template("admin.html", pending=pending)
+        reports = ProblemReport.query.order_by(ProblemReport.created_at.desc()).all()
+        return render_template("admin.html", pending=pending, reports=reports)
     if user.role == "docente":
         offerings = Offering.query.filter_by(teacher_id=user.id).order_by(Offering.semester, Offering.subject_name).all()
         return render_template("teacher.html", offerings=offerings)
@@ -243,25 +277,95 @@ def create_offering():
         name = request.form.get("subject_name", "").strip()
         semester = request.form.get("semester", type=int)
         group = request.form.get("group_name", "").strip() or "General"
+        rubric_titles = request.form.getlist("rubric_title")
         names = request.form.getlist("criterion_name")
         weights_raw = request.form.getlist("weight")
+        indexes = request.form.getlist("criterion_rubric_index")
         try:
             weights = [float(x) for x in weights_raw]
+            indexes = [int(x) for x in indexes]
         except ValueError:
-            weights = []
-        if not name or semester not in range(1, 7) or len(names) == 0 or len(names) != len(weights):
-            flash("Revisa el nombre, semestre y criterios.", "error")
-        elif any(not n.strip() for n in names) or any(w <= 0 for w in weights) or abs(sum(weights) - 100) > 0.01:
-            flash("Los criterios deben tener nombre, porcentajes positivos y sumar exactamente 100%.", "error")
+            weights, indexes = [], []
+        valid_rows = len(names) == len(weights) == len(indexes) and len(names) > 0
+        try:
+            total = sum(weights)
+        except TypeError:
+            total = 0
+        if not name or semester not in range(1, 7) or not rubric_titles or not valid_rows:
+            flash("Revisa el nombre, semestre y las rúbricas.", "error")
+        elif any(not t.strip() or len(t.strip()) > 35 for t in rubric_titles) or any(i < 0 or i >= len(rubric_titles) for i in indexes) or any(not n.strip() or len(n.strip()) > 40 for n in names) or any(w <= 0 for w in weights) or abs(total - 100) > 0.01:
+            flash("Cada criterio debe tener nombre y porcentaje positivo; todos los porcentajes deben sumar 100%.", "error")
         else:
             offering = Offering(subject_name=name, semester=semester, group_name=group, teacher_id=current_user().id)
-            for n, w in zip(names, weights):
-                offering.criteria.append(Criterion(name=n.strip(), weight=w))
+            for rubric_index, criterion_name, weight in zip(indexes, names, weights):
+                rubric = rubric_titles[rubric_index].strip()
+                offering.criteria.append(Criterion(name=f"{rubric}|||{criterion_name.strip()}", weight=weight))
             db.session.add(offering)
             db.session.commit()
-            flash("Materia y rúbrica guardadas.", "success")
+            flash("Materia y rúbricas guardadas.", "success")
             return redirect(url_for("dashboard"))
-    return render_template("offering_form.html")
+    return render_template("offering_form.html", offering=None, rubric_groups=[])
+
+
+@app.route("/docente/oferta/<int:offering_id>/editar", methods=["GET", "POST"])
+@role_required("docente")
+def edit_offering(offering_id):
+    offering = db.session.get(Offering, offering_id)
+    if not offering or offering.teacher_id != current_user().id:
+        flash("No tienes permiso para modificar esa materia.", "error")
+        return redirect(url_for("dashboard"))
+    if request.method == "POST":
+        name = request.form.get("subject_name", "").strip()
+        semester = request.form.get("semester", type=int)
+        group = request.form.get("group_name", "").strip() or "General"
+        rubric_titles = request.form.getlist("rubric_title")
+        names = request.form.getlist("criterion_name")
+        weights_raw = request.form.getlist("weight")
+        indexes_raw = request.form.getlist("criterion_rubric_index")
+        ids_raw = request.form.getlist("criterion_id")
+        try:
+            weights = [float(x) for x in weights_raw]
+            indexes = [int(x) for x in indexes_raw]
+            ids = [int(x) if x else None for x in ids_raw]
+        except ValueError:
+            weights, indexes, ids = [], [], []
+        valid_rows = len(names) == len(weights) == len(indexes) == len(ids) and len(names) > 0
+        if not name or semester not in range(1, 7) or not rubric_titles or not valid_rows:
+            flash("Revisa el nombre, semestre y las rúbricas.", "error")
+        elif any(not t.strip() or len(t.strip()) > 35 for t in rubric_titles) or any(i < 0 or i >= len(rubric_titles) for i in indexes) or any(not n.strip() or len(n.strip()) > 40 for n in names) or any(w <= 0 for w in weights) or abs(sum(weights) - 100) > 0.01 or set(indexes) != set(range(len(rubric_titles))):
+            flash("Los criterios deben tener nombre, porcentajes positivos y sumar 100%.", "error")
+        else:
+            existing = {c.id: c for c in offering.criteria}
+            submitted_ids = {cid for cid in ids if cid is not None}
+            invalid_ids = submitted_ids - set(existing)
+            if invalid_ids:
+                flash("Se detectó un criterio que no pertenece a esta materia.", "error")
+            else:
+                # No se permite quitar criterios que ya tengan calificaciones capturadas.
+                protected = []
+                for cid in set(existing) - submitted_ids:
+                    if Grade.query.filter_by(criterion_id=cid).first():
+                        protected.append(cid)
+                if protected:
+                    flash("No puedes quitar criterios que ya tienen calificaciones registradas. Puedes cambiar su nombre o porcentaje.", "error")
+                else:
+                    offering.subject_name = name
+                    offering.semester = semester
+                    offering.group_name = group
+                    for cid in set(existing) - submitted_ids:
+                        db.session.delete(existing[cid])
+                    for rubric_index, criterion_name, weight, cid in zip(indexes, names, weights, ids):
+                        rubric = rubric_titles[rubric_index].strip()
+                        stored_name = f"{rubric}|||{criterion_name.strip()}"
+                        if cid:
+                            existing[cid].name = stored_name
+                            existing[cid].weight = weight
+                        else:
+                            offering.criteria.append(Criterion(name=stored_name, weight=weight))
+                    db.session.commit()
+                    flash("Materia y rúbricas actualizadas.", "success")
+                    return redirect(url_for("dashboard"))
+    return render_template("offering_form.html", offering=offering, rubric_groups=group_criteria(offering.criteria))
 
 
 @app.route("/alumno/inscribir/<int:offering_id>", methods=["POST"])
@@ -313,7 +417,7 @@ def grades(enrollment_id):
         flash("Calificaciones guardadas.", "success")
         return redirect(url_for("grades", enrollment_id=enrollment.id))
     result = weighted_result(enrollment)
-    return render_template("grades.html", enrollment=enrollment, result=result)
+    return render_template("grades.html", enrollment=enrollment, result=result, rubric_groups=group_criteria(enrollment.offering.criteria))
 
 
 @app.route("/alumno/historial")
@@ -347,6 +451,40 @@ def complete_note(note_id):
     if note and note.student_id == current_user().id:
         note.done = not note.done
         db.session.commit()
+    return redirect(url_for("dashboard"))
+
+
+@app.route("/reportar-problema", methods=["GET", "POST"])
+def report_problem():
+    if request.method == "POST":
+        category = request.form.get("category", "Otro").strip()
+        message = request.form.get("message", "").strip()
+        allowed = {"Error técnico", "Problema con calificaciones", "Problema de cuenta", "Sugerencia", "Otro"}
+        user = current_user()
+        if category not in allowed or len(message) < 10 or len(message) > 2000:
+            flash("Elige una categoría y describe el problema con al menos 10 caracteres (máximo 2000).", "error")
+        else:
+            report = ProblemReport(
+                user_id=user.id if user else None,
+                username=user.display_name if user else "Usuario sin sesión",
+                category=category,
+                message=message
+            )
+            db.session.add(report)
+            db.session.commit()
+            flash("Tu reporte fue enviado al administrador. Gracias por avisarnos.", "success")
+            return redirect(url_for("report_problem"))
+    return render_template("report_problem.html")
+
+
+@app.route("/admin/reporte/<int:report_id>/resolver", methods=["POST"])
+@role_required("admin")
+def resolve_report(report_id):
+    report = db.session.get(ProblemReport, report_id)
+    if report:
+        report.status = "Revisado" if report.status == "Pendiente" else "Pendiente"
+        db.session.commit()
+        flash("Estado del reporte actualizado.", "success")
     return redirect(url_for("dashboard"))
 
 
