@@ -1,112 +1,57 @@
 
 {% extends "base.html" %}
 
+{% block title %}Reportar problema · EduPredict{% endblock %}
+
 {% block content %}
-<style>
-.report-container {
-    max-width: 650px;
-    margin: 35px auto;
-    padding: 28px;
-    background: #ffffff;
-    border: 1px solid #e5e7df;
-    border-radius: 16px;
-    box-shadow: 0 5px 20px rgba(0,0,0,0.05);
-}
+<section class="panel report-page">
+    <p class="eyebrow">SOPORTE DE EDUPREDICT</p>
 
-.report-container h2 {
-    color: #245c43;
-    margin-bottom: 10px;
-}
+    <h1>Reportar un problema</h1>
 
-.report-container p {
-    color: #667085;
-    margin-bottom: 24px;
-}
-
-.report-container label {
-    display: block;
-    margin: 16px 0 7px;
-    font-weight: 600;
-    color: #344054;
-}
-
-.report-container input,
-.report-container select,
-.report-container textarea {
-    width: 100%;
-    padding: 12px;
-    border: 1px solid #d0d5dd;
-    border-radius: 9px;
-    font-size: 15px;
-    box-sizing: border-box;
-    background: #fff;
-}
-
-.report-container textarea {
-    min-height: 140px;
-    resize: vertical;
-}
-
-.report-container button {
-    width: 100%;
-    margin-top: 22px;
-    padding: 13px;
-    border: none;
-    border-radius: 9px;
-    background: #28734f;
-    color: white;
-    font-size: 16px;
-    font-weight: bold;
-    cursor: pointer;
-}
-
-.report-container button:hover {
-    background: #205c40;
-}
-
-.report-back {
-    display: inline-block;
-    margin-top: 18px;
-    color: #28734f;
-    text-decoration: none;
-}
-</style>
-
-<div class="report-container">
-    <h2>Reportar un problema</h2>
-
-    <p>
-        Ayúdanos a mejorar EduPredict. Describe el problema
-        que encontraste para que podamos revisarlo.
+    <p class="muted">
+        Cuéntanos qué ocurrió. Tu reporte quedará registrado
+        para que el administrador pueda revisarlo desde su panel.
     </p>
 
     <form method="POST" action="{{ url_for('report_problem') }}">
-        <label for="categoria">Tipo de problema</label>
 
-        <select name="categoria" id="categoria" required>
-            <option value="">Selecciona una opción</option>
-            <option value="Error al ingresar">Error al ingresar</option>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <label for="category">Tipo de problema</label>
+
+        <select id="category" name="category" required>
+            <option value="">Selecciona una categoría</option>
+            <option value="Error técnico">Error técnico</option>
             <option value="Problema con calificaciones">Problema con calificaciones</option>
-            <option value="Problema con materias">Problema con materias</option>
-            <option value="Problema visual">Problema visual</option>
+            <option value="Problema de cuenta">Problema de cuenta</option>
+            <option value="Sugerencia">Sugerencia</option>
             <option value="Otro">Otro</option>
         </select>
 
-        <label for="descripcion">Descripción del problema</label>
+        <label for="message">Describe lo que ocurrió</label>
 
         <textarea
-            name="descripcion"
-            id="descripcion"
-            placeholder="Explica qué ocurrió..."
-            required
+            id="message"
+            name="message"
+            minlength="10"
             maxlength="2000"
+            rows="7"
+            required
+            placeholder="Explica qué estabas haciendo y qué problema encontraste..."
         ></textarea>
 
-        <button type="submit">Enviar reporte</button>
+        <p class="muted">
+            Escribe entre 10 y 2000 caracteres.
+            No incluyas contraseñas ni datos privados.
+        </p>
+
+        <button type="submit">Enviar reporte al administrador</button>
+
     </form>
 
-    <a class="report-back" href="{{ url_for('index') }}">
-        Volver
-    </a>
-</div>
+    <p>
+        <a href="{{ url_for('index') }}">Volver a EduPredict</a>
+    </p>
+</section>
 {% endblock %}
