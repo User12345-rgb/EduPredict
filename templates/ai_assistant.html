@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block title %}EduPredict AI · Asistente académico{% endblock %}
+{% block content %}
+<section class="ai-page">
+  <div class="ai-heading">
+    <div>
+      <p class="eyebrow">ASISTENTE ACADÉMICO</p>
+      <h1>EduPredict AI</h1>
+      <p class="muted">Pregunta, aprende y desarrolla tus trabajos paso a paso.</p>
+    </div>
+    <a class="small-btn secondary" href="{{ url_for('dashboard') }}">Volver a mi panel</a>
+  </div>
+
+  <div class="ai-notice">
+    <strong>Antes de comenzar:</strong> no escribas contraseñas, datos personales, nombres completos ni información privada. Tus mensajes se envían a Google Gemini para generar respuestas. En el nivel gratuito, Google puede utilizar el contenido enviado para mejorar sus productos.
+  </div>
+
+  <section class="ai-chat panel">
+    <div class="ai-welcome" id="aiWelcome">
+      <div class="ai-mark">✦</div>
+      <h2>¿Qué te gustaría aprender hoy?</h2>
+      <p class="muted">Puedo ayudarte a entender temas, organizar investigaciones, preparar exposiciones, resolver ejercicios y revisar tus ideas.</p>
+      <div class="ai-suggestions">
+        <button type="button" class="ai-suggestion" data-prompt="Explícame la fotosíntesis con palabras sencillas y un ejemplo.">Explícame un tema</button>
+        <button type="button" class="ai-suggestion" data-prompt="Ayúdame a organizar una investigación escolar paso a paso.">Organizar un trabajo</button>
+        <button type="button" class="ai-suggestion" data-prompt="Enséñame a resolver un ejercicio paso a paso.">Aprender a resolver un ejercicio</button>
+      </div>
+    </div>
+
+    <div class="ai-messages" id="aiMessages" aria-live="polite"></div>
+
+    <form class="ai-composer" id="aiForm">
+      <input type="hidden" id="csrfToken" value="{{ csrf_token() }}">
+      <textarea id="aiInput" rows="2" maxlength="4000" placeholder="Escribe tu pregunta aquí..." aria-label="Escribe tu pregunta" required></textarea>
+      <div class="ai-composer-bottom">
+        <span class="muted">Enter para enviar · Shift + Enter para nueva línea</span>
+        <button class="btn" id="aiSend" type="submit">Enviar ↑</button>
+      </div>
+    </form>
+    <div class="ai-status muted" id="aiStatus">Las respuestas pueden contener errores. Verifica los datos importantes con tus materiales de clase.</div>
+  </section>
+</section>
+
+<script>
+(() => {
+  const form = document.getElementById("aiForm");
+  const input = document.getElementById("aiInput");
+  const send = document.getElementById("aiSend");
+  const messagesBox = document.getElementById("aiMessages");
+  const welcome = document.getElementById("aiWelcome");
+  const status = document.getElementById("aiStatus");
+  const csrfToken = document.getElementById("csrfToken").value;
+  let conversation = [];
+
+  function addMessage(role, text) {
+    welcome.hidden = true;
+    const item = document.createElement("div");
+    item.className = "ai-message " + (role === "user" ? "from-user" : "from-ai");
+    const label = document.createElement("strong");
+    label.textContent = role === "user" ? "Tú" : "EduPredict AI";
+    const content = document.createElement("p");
+    content.textContent = text;
+    item.appendChild(label);
+    item.appendChild(content);
+    messagesBox.appendChild(item);
+    messagesBox.scrollTop = messagesBox.scrollHeight;
+  }
+
+  async function sendMessage(message) {
+    if (!message || send.disabled) return;
+    addMessage("user", message);
+    conversation.push({role: "user", text: message});
+    conversation = conversation.slice(-12);
+    input.value = "";
+    send.disabled = true;
+    send.textContent = "Enviando...";
+    status.textContent = "EduPredict AI está preparando una respuesta...";
+    try {
+      const response = await fetch("{{ url_for('edu_ai_api') }}", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": csrfToken
+        },
+        body: JSON.stringify({messages: conversation})
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No se pudo obtener una respuesta.");
+      addMessage("model", data.answer);
+      conversation.push({role: "model", text: data.answer});
+      conversation = conversation.slice(-12);
+      status.textContent = "Puedes continuar la conversación con otra pregunta.";
+    } catch (error) {
+      addMessage("model", "No pude responder: " + error.message);
+      status.textContent = "Inténtalo de nuevo más tarde.";
+    } finally {
+      send.disabled = false;
+      send.textContent = "Enviar ↑";
+      input.focus();
+    }
+  }
+
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    sendMessage(input.value.trim());
+  });
+
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      form.requestSubmit();
+    }
+  });
+
+  document.querySelectorAll(".ai-suggestion").forEach((button) => {
+    button.addEventListener("click", () => sendMessage(button.dataset.prompt));
+  });
+})();
+</script>
+{% endblock %}
