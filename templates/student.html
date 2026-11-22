@@ -9,6 +9,17 @@
   </div>
 </div>
 
+<section class="panel ai-dashboard-card">
+  <div class="section-head">
+    <div>
+      <p class="eyebrow">ASISTENTE ACADÉMICO</p>
+      <h2>EduPredict AI</h2>
+      <p class="muted">¿Tienes dudas con una tarea, investigación o tema de clase? Pregunta y recibe explicaciones paso a paso.</p>
+    </div>
+    <a class="btn" href="{{ url_for('ai_assistant') }}">Abrir asistente AI →</a>
+  </div>
+</section>
+
 {% set ns = namespace(total=0, count=0, at_risk=0, approved=0, captured=0, total_weight=0) %}
 {% for e, r in rows %}
   {% if r.current is not none %}
