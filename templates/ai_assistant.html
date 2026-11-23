@@ -12,7 +12,7 @@
   </div>
 
   <div class="ai-notice">
-    <strong>Antes de comenzar:</strong> no escribas contraseñas, datos personales, nombres completos ni información privada. Tus mensajes se envían a Google Gemini para generar respuestas. En el nivel gratuito, Google puede utilizar el contenido enviado para mejorar sus productos.
+    <strong>IA local:</strong> el modelo se descarga una vez en este navegador y después genera las respuestas en tu dispositivo. Tus preguntas no se envían a un servicio de IA externo. Necesitas conexión a internet para la primera descarga y un navegador compatible con WebGPU. No escribas contraseñas ni datos personales.
   </div>
 
   <section class="ai-chat panel">
@@ -29,28 +29,37 @@
 
     <div class="ai-messages" id="aiMessages" aria-live="polite"></div>
 
+    <div class="ai-engine-controls">
+      <button class="btn" id="aiLoad" type="button">Preparar IA en este dispositivo</button>
+      <span class="muted" id="aiProgress">Primero debes cargar el modelo (aprox. 900 MB).</span>
+    </div>
+
     <form class="ai-composer" id="aiForm">
-      <input type="hidden" id="csrfToken" value="{{ csrf_token() }}">
-      <textarea id="aiInput" rows="2" maxlength="4000" placeholder="Escribe tu pregunta aquí..." aria-label="Escribe tu pregunta" required></textarea>
+      <textarea id="aiInput" rows="2" maxlength="2000" placeholder="Primero prepara la IA para poder escribir..." aria-label="Escribe tu pregunta" required disabled></textarea>
       <div class="ai-composer-bottom">
         <span class="muted">Enter para enviar · Shift + Enter para nueva línea</span>
-        <button class="btn" id="aiSend" type="submit">Enviar ↑</button>
+        <button class="btn" id="aiSend" type="submit" disabled>Enviar ↑</button>
       </div>
     </form>
-    <div class="ai-status muted" id="aiStatus">Las respuestas pueden contener errores. Verifica los datos importantes con tus materiales de clase.</div>
+    <div class="ai-status muted" id="aiStatus">El modelo es pequeño y puede equivocarse. Verifica los datos importantes con tus materiales de clase.</div>
   </section>
 </section>
 
-<script>
+<script type="module">
 (() => {
   const form = document.getElementById("aiForm");
   const input = document.getElementById("aiInput");
   const send = document.getElementById("aiSend");
+  const loadButton = document.getElementById("aiLoad");
   const messagesBox = document.getElementById("aiMessages");
   const welcome = document.getElementById("aiWelcome");
   const status = document.getElementById("aiStatus");
-  const csrfToken = document.getElementById("csrfToken").value;
-  let conversation = [];
+  const progress = document.getElementById("aiProgress");
+  const MODEL_ID = "Llama-3.2-1B-Instruct-q4f16_1-MLC";
+  const SYSTEM_PROMPT = "Eres EduPredict AI, un asistente académico para estudiantes de educación media superior. Ayuda con tareas, investigaciones, exposiciones, programación, matemáticas, redacción y dudas escolares. Explica paso a paso con lenguaje sencillo. No inventes fuentes ni datos. Si falta información, pregunta. Enseña para que el estudiante comprenda. No solicites contraseñas ni datos personales. Responde en español salvo que pidan otro idioma.";
+  let engine = null;
+  let loading = false;
+  let conversation = [{role: "system", content: SYSTEM_PROMPT}];
 
   function addMessage(role, text) {
     welcome.hidden = true;
@@ -66,54 +75,105 @@
     messagesBox.scrollTop = messagesBox.scrollHeight;
   }
 
-  async function sendMessage(message) {
-    if (!message || send.disabled) return;
-    addMessage("user", message);
-    conversation.push({role: "user", text: message});
-    conversation = conversation.slice(-12);
-    input.value = "";
-    send.disabled = true;
-    send.textContent = "Enviando...";
-    status.textContent = "EduPredict AI está preparando una respuesta...";
+  async function loadModel() {
+    if (engine || loading) return;
+    if (!("gpu" in navigator)) {
+      status.textContent = "Este navegador o dispositivo no es compatible con WebGPU. Prueba con una versión actualizada de Microsoft Edge o Google Chrome en una computadora compatible.";
+      progress.textContent = "WebGPU no está disponible.";
+      return;
+    }
+    loading = true;
+    loadButton.disabled = true;
+    loadButton.textContent = "Cargando modelo...";
+    status.textContent = "Conectando con la biblioteca de IA...";
+    progress.textContent = "Preparando descarga. La primera carga puede tardar varios minutos.";
     try {
-      const response = await fetch("{{ url_for('edu_ai_api') }}", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-CSRFToken": csrfToken
-        },
-        body: JSON.stringify({messages: conversation})
+      const webllm = await import("https://esm.run/@mlc-ai/web-llm");
+      engine = await webllm.CreateMLCEngine(MODEL_ID, {
+        initProgressCallback: (report) => {
+          progress.textContent = report.text || "Descargando y preparando el modelo...";
+          status.textContent = "La IA se está preparando. No cierres esta pestaña.";
+        }
       });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "No se pudo obtener una respuesta.");
-      addMessage("model", data.answer);
-      conversation.push({role: "model", text: data.answer});
-      conversation = conversation.slice(-12);
-      status.textContent = "Puedes continuar la conversación con otra pregunta.";
-    } catch (error) {
-      addMessage("model", "No pude responder: " + error.message);
-      status.textContent = "Inténtalo de nuevo más tarde.";
-    } finally {
+      input.disabled = false;
       send.disabled = false;
-      send.textContent = "Enviar ↑";
+      input.placeholder = "Escribe tu pregunta aquí...";
+      loadButton.textContent = "IA preparada";
+      progress.textContent = "Modelo listo en este dispositivo.";
+      status.textContent = "EduPredict AI está lista. Puedes comenzar a preguntar.";
       input.focus();
+    } catch (error) {
+      engine = null;
+      loadButton.disabled = false;
+      loadButton.textContent = "Intentar cargar de nuevo";
+      progress.textContent = "No se pudo preparar el modelo.";
+      status.textContent = "Error al cargar la IA. Comprueba tu conexión, que el navegador permita WebGPU y que el dispositivo tenga memoria suficiente. Detalle: " + (error.message || "error desconocido");
+    } finally {
+      loading = false;
     }
   }
 
+  async function sendMessage(message) {
+    if (!message || !engine || send.disabled) return;
+    addMessage("user", message);
+    conversation.push({role: "user", content: message});
+    conversation = [conversation[0], ...conversation.slice(-10)];
+    input.value = "";
+    send.disabled = true;
+    loadButton.disabled = true;
+    send.textContent = "Pensando...";
+    status.textContent = "EduPredict AI está preparando una respuesta...";
+    const answerItem = document.createElement("div");
+    answerItem.className = "ai-message from-ai";
+    const label = document.createElement("strong");
+    label.textContent = "EduPredict AI";
+    const content = document.createElement("p");
+    content.textContent = "Estoy pensando...";
+    answerItem.appendChild(label);
+    answerItem.appendChild(content);
+    messagesBox.appendChild(answerItem);
+    try {
+      const result = await engine.chat.completions.create({
+        messages: conversation,
+        temperature: 0.7,
+        max_tokens: 450
+      });
+      const answer = result.choices?.[0]?.message?.content?.trim() || "No pude generar una respuesta. Intenta formular la pregunta de otra manera.";
+      content.textContent = answer;
+      conversation.push({role: "assistant", content: answer});
+      conversation = [conversation[0], ...conversation.slice(-10)];
+      status.textContent = "Puedes continuar la conversación con otra pregunta.";
+    } catch (error) {
+      content.textContent = "No pude generar la respuesta. Intenta de nuevo.";
+      status.textContent = "Ocurrió un problema al generar la respuesta: " + (error.message || "error desconocido");
+    } finally {
+      send.disabled = false;
+      loadButton.disabled = false;
+      send.textContent = "Enviar ↑";
+      input.focus();
+      messagesBox.scrollTop = messagesBox.scrollHeight;
+    }
+  }
+
+  loadButton.addEventListener("click", loadModel);
   form.addEventListener("submit", (event) => {
     event.preventDefault();
     sendMessage(input.value.trim());
   });
-
   input.addEventListener("keydown", (event) => {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       form.requestSubmit();
     }
   });
-
   document.querySelectorAll(".ai-suggestion").forEach((button) => {
-    button.addEventListener("click", () => sendMessage(button.dataset.prompt));
+    button.addEventListener("click", () => {
+      if (!engine) {
+        status.textContent = "Primero presiona “Preparar IA en este dispositivo”.";
+        return;
+      }
+      sendMessage(button.dataset.prompt);
+    });
   });
 })();
 </script>
