@@ -1,3 +1,4 @@
+
 {% extends "base.html" %}
 {% block title %}Mi panel · EduPredict{% endblock %}
 {% block content %}
@@ -9,14 +10,14 @@
   </div>
 </div>
 
-<section class="panel ai-dashboard-card">
+<section class="panel">
   <div class="section-head">
     <div>
-      <p class="eyebrow">ASISTENTE ACADÉMICO</p>
-      <h2>EduPredict AI</h2>
-      <p class="muted">¿Tienes dudas con una tarea, investigación o tema de clase? Pregunta y recibe explicaciones paso a paso.</p>
+      <p class="eyebrow">SEGUIMIENTO ACADÉMICO</p>
+      <h2>Mi reporte académico</h2>
+      <p class="muted">Consulta un resumen de tu rendimiento, tus calificaciones y el avance de tus materias.</p>
     </div>
-    <a class="btn" href="{{ url_for('ai_assistant') }}">Abrir asistente AI →</a>
+    <a class="btn" href="{{ url_for('student_report') }}">Ver mi reporte académico →</a>
   </div>
 </section>
 
