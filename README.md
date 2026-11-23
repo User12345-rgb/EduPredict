@@ -18,10 +18,10 @@ Python 3.11 o superior y una base PostgreSQL (Neon funciona).
 No compartas el archivo `.env`. Las calificaciones son para seguimiento personal y no son calificaciones oficiales.
 
 
-## EduPredict AI
-El asistente académico utiliza WebLLM para ejecutar un modelo de lenguaje directamente en el navegador del alumno.
-No necesita una clave API ni agrega costos por consulta al servidor. La primera carga descarga el modelo
-(aproximadamente 900 MB) y requiere internet; después el navegador puede reutilizar la descarga guardada.
-Se necesita un navegador y un dispositivo compatibles con WebGPU. El rendimiento depende del equipo.
-Las conversaciones se mantienen temporalmente en la página y no se guardan en la base de datos.
-Las respuestas pueden contener errores y deben verificarse con los materiales de clase.
+
+## Reporte académico
+El alumno puede consultar su reporte académico privado desde el menú o desde su panel.
+Incluye promedio de materias con calificaciones, avance de captura, materias por revisar,
+proyección orientativa y detalle de calificaciones por criterio. El botón "Imprimir / Guardar
+como PDF" utiliza la función de impresión del navegador; el usuario puede elegir "Guardar como PDF".
+El reporte solo muestra información de la cuenta que inició sesión.

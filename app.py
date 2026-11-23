@@ -455,10 +455,58 @@ def complete_note(note_id):
 
 
 
-@app.route("/asistente")
+@app.route("/alumno/reporte")
 @role_required("alumno")
-def ai_assistant():
-    return render_template("ai_assistant.html")
+def student_report():
+    user = current_user()
+    enrollments = Enrollment.query.filter_by(student_id=user.id).all()
+    report_rows = []
+    current_values = []
+    at_risk = 0
+    approved = 0
+    captured_weight = 0
+    total_weight = 0
+
+    for enrollment in enrollments:
+        result = weighted_result(enrollment)
+        if result["current"] is not None:
+            current_values.append(result["current"])
+            if result["current"] < 7:
+                at_risk += 1
+            else:
+                approved += 1
+
+        captured_weight += result["completed_weight"]
+        total_weight += result["total_weight"]
+
+        criteria_rows = []
+        for criterion in enrollment.offering.criteria:
+            rubric, criterion_name = split_criterion(criterion)
+            criteria_rows.append({
+                "rubric": rubric,
+                "name": criterion_name,
+                "weight": criterion.weight,
+                "grade": result["entered"].get(criterion.id)
+            })
+
+        report_rows.append({
+            "enrollment": enrollment,
+            "result": result,
+            "criteria": criteria_rows
+        })
+
+    average = sum(current_values) / len(current_values) if current_values else None
+    overall_progress = (captured_weight / total_weight * 100) if total_weight else 0
+
+    return render_template(
+        "academic_report.html",
+        report_rows=report_rows,
+        average=average,
+        at_risk=at_risk,
+        approved=approved,
+        overall_progress=overall_progress,
+        generated_at=datetime.now()
+    )
 
 
 @app.route("/reportar-problema", methods=["GET", "POST"])
