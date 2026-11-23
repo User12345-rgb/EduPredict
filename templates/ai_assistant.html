@@ -61,6 +61,11 @@
   let loading = false;
   let conversation = [{role: "system", content: SYSTEM_PROMPT}];
 
+  function trimConversation() {
+    // Conserva un único mensaje system al inicio y los últimos 10 mensajes de la charla.
+    conversation = [conversation[0], ...conversation.slice(1).slice(-10)];
+  }
+
   function addMessage(role, text) {
     welcome.hidden = true;
     const item = document.createElement("div");
@@ -117,7 +122,7 @@
     if (!message || !engine || send.disabled) return;
     addMessage("user", message);
     conversation.push({role: "user", content: message});
-    conversation = [conversation[0], ...conversation.slice(-10)];
+    trimConversation();
     input.value = "";
     send.disabled = true;
     loadButton.disabled = true;
@@ -141,7 +146,7 @@
       const answer = result.choices?.[0]?.message?.content?.trim() || "No pude generar una respuesta. Intenta formular la pregunta de otra manera.";
       content.textContent = answer;
       conversation.push({role: "assistant", content: answer});
-      conversation = [conversation[0], ...conversation.slice(-10)];
+      trimConversation();
       status.textContent = "Puedes continuar la conversación con otra pregunta.";
     } catch (error) {
       content.textContent = "No pude generar la respuesta. Intenta de nuevo.";
