@@ -1,12 +1,9 @@
 import os
-import json
-import urllib.request
-import urllib.error
 from datetime import datetime, date
 from functools import wraps
 
 from dotenv import load_dotenv
-from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify
+from flask import Flask, render_template, request, redirect, url_for, flash, session
 from flask_sqlalchemy import SQLAlchemy
 from flask_wtf.csrf import CSRFProtect
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -463,87 +460,6 @@ def complete_note(note_id):
 def ai_assistant():
     return render_template("ai_assistant.html")
 
-
-@app.route("/api/edu-ai", methods=["POST"])
-@role_required("alumno")
-def edu_ai_api():
-    api_key = os.getenv("GEMINI_API_KEY", "").strip()
-    if not api_key:
-        return jsonify({"error": "El asistente todavía no está configurado. El administrador debe agregar GEMINI_API_KEY en las variables de entorno de Render."}), 503
-
-    data = request.get_json(silent=True) or {}
-    messages = data.get("messages", [])
-    if not isinstance(messages, list) or not messages:
-        return jsonify({"error": "Escribe una pregunta para comenzar."}), 400
-
-    contents = []
-    for item in messages[-12:]:
-        if not isinstance(item, dict):
-            continue
-        role = item.get("role")
-        message_text = item.get("text")
-        if role not in ("user", "model") or not isinstance(message_text, str):
-            continue
-        message_text = message_text.strip()
-        if not message_text:
-            continue
-        contents.append({
-            "role": role,
-            "parts": [{"text": message_text[:4000]}]
-        })
-
-    if not contents or contents[-1]["role"] != "user":
-        return jsonify({"error": "No se encontró una pregunta válida."}), 400
-
-    system_instruction = (
-        "Eres EduPredict AI, un asistente académico amable, claro y paciente para estudiantes de educación media superior. "
-        "Puedes ayudar con tareas, investigaciones, exposiciones, programación, matemáticas, redacción y dudas generales. "
-        "Explica paso a paso con lenguaje sencillo, adapta la profundidad al nivel del estudiante y pregunta si falta información. "
-        "No inventes fuentes, datos ni instrucciones de docentes. Cuando ayudes con trabajos, enseña y orienta en lugar de promover que el alumno entregue algo que no entiende. "
-        "No afirmes que conoces sus calificaciones ni datos de EduPredict: no tienes acceso a su cuenta ni a su base de datos. "
-        "No solicites contraseñas, datos personales sensibles ni información privada. Responde en español salvo que el usuario pida otro idioma."
-    )
-
-    payload = {
-        "systemInstruction": {"parts": [{"text": system_instruction}]},
-        "contents": contents,
-        "generationConfig": {"temperature": 0.7, "maxOutputTokens": 900}
-    }
-    endpoint = (
-        "https://generativelanguage.googleapis.com/v1beta/models/"
-        "gemini-3.5-flash-lite:generateContent?key=" + api_key
-    )
-    req = urllib.request.Request(
-        endpoint,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
-        method="POST"
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=35) as response:
-            result = json.loads(response.read().decode("utf-8"))
-        candidates = result.get("candidates", [])
-        parts = candidates[0].get("content", {}).get("parts", []) if candidates else []
-        answer = "\n".join(p.get("text", "") for p in parts if isinstance(p, dict)).strip()
-        if not answer:
-            return jsonify({"error": "La IA no pudo generar una respuesta. Intenta formular tu pregunta de otra manera."}), 502
-        return jsonify({"answer": answer})
-    except urllib.error.HTTPError as error:
-        try:
-            details = json.loads(error.read().decode("utf-8"))
-            message = details.get("error", {}).get("message", "")
-        except Exception:
-            message = ""
-        if error.code == 429:
-            return jsonify({"error": "Se alcanzó el límite gratuito de consultas por ahora. Intenta más tarde."}), 429
-        if error.code in (401, 403, 404):
-            return jsonify({"error": "La conexión con el servicio de IA no está autorizada o el modelo no está disponible. Revisa la configuración de la API."}), 502
-        return jsonify({"error": "El servicio de IA respondió con un error. Intenta de nuevo más tarde."}), 502
-    except (urllib.error.URLError, TimeoutError):
-        return jsonify({"error": "No se pudo conectar con la IA. Revisa tu conexión e inténtalo de nuevo."}), 503
-    except Exception:
-        app.logger.exception("Error inesperado al consultar EduPredict AI")
-        return jsonify({"error": "Ocurrió un problema al procesar la respuesta."}), 500
 
 @app.route("/reportar-problema", methods=["GET", "POST"])
 def report_problem():
